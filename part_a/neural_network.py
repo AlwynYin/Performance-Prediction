@@ -9,7 +9,56 @@ import torch.utils.data
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
+from sklearn.metrics import precision_score, recall_score, f1_score, confusion_matrix
 
+
+def evaluate_detailed(model, train_data, test_data):
+    """
+    Evaluate the model on the provided test data and compute detailed classification metrics.
+
+    :param model: The PyTorch model to evaluate.
+    :param train_data: 2D FloatTensor of training data.
+    :param test_data: A dictionary containing 'user_id', 'question_id', and 'is_correct' lists.
+    :return: A dictionary with accuracy, precision, recall, F1 score, false positives, false negatives, true positives, true negatives, total positives, and total negatives.
+    """
+    model.eval()
+
+    predictions = []
+    true_labels = []
+
+    with torch.no_grad():
+        for i, u in enumerate(test_data["user_id"]):
+            inputs = train_data[u].unsqueeze(0)
+            output = model(inputs)
+
+            guess = output[0][test_data["question_id"][i]].item() >= 0.5
+            predictions.append(int(guess))
+            true_labels.append(test_data["is_correct"][i])
+
+    predictions = torch.tensor(predictions)
+    true_labels = torch.tensor(true_labels)
+
+    accuracy = (predictions == true_labels).float().mean().item()
+    precision = precision_score(true_labels, predictions, average='binary')
+    recall = recall_score(true_labels, predictions, average='binary')
+    f1 = f1_score(true_labels, predictions, average='binary')
+
+    tn, fp, fn, tp = confusion_matrix(true_labels, predictions).ravel()
+    total_positives = tp + fn
+    total_negatives = tn + fp
+
+    return {
+        'accuracy': accuracy,
+        'precision': precision,
+        'recall': recall,
+        'F1_score': f1,
+        'false_positives': fp,
+        'false_negatives': fn,
+        'true_positives': tp,
+        'true_negatives': tn,
+        'total_positives': total_positives,
+        'total_negatives': total_negatives
+    }
 
 def load_data(base_path="../data"):
     """ Load the data in PyTorch Tensor.
@@ -189,6 +238,7 @@ def main():
     train(model, lr, lamb, train_matrix, zero_train_matrix,
           valid_data, num_epoch)
     print("test accuracy: ", evaluate(model, zero_train_matrix, test_data))
+    print(evaluate_detailed(model, zero_train_matrix, test_data))
 
     k = 10  # 10 50 100 200 500
     model = AutoEncoder(num_question=zero_train_matrix.shape[1], k=k)
@@ -201,6 +251,7 @@ def main():
     train(model, lr, lamb, train_matrix, zero_train_matrix,
           valid_data, num_epoch)
     print("test accuracy: ", evaluate(model, zero_train_matrix, test_data))
+    print(evaluate_detailed(model, zero_train_matrix, test_data))
     #####################################################################
     #                       END OF YOUR CODE                            #
     #####################################################################
